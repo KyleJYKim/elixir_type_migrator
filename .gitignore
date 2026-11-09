@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+# Elixir
+/client/_build/
+/client/deps/
+*.ez
+erl_crash.dump
+# Models and data (never commit weights or the raw dataset)
+*.bin
+*.safetensors
+*.pt
+checkpoints/
+data/raw/
+# Secrets and local
+.env
+.DS_Store
+# Claude Code local settings
+.claude/settings.local.json
