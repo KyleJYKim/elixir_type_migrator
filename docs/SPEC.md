@@ -1,6 +1,6 @@
 # elixir_type_migrator — v1 spec
 
-*Status: draft, 2026-11-09 · Target: v1.0 tagged by Sun 6 Dec 2026, deployed by Sun 20 Dec 2026*
+*Status: draft, 09-11-2026 · Target: v1.0 tagged by Sun 06 Dec 2026, deployed by Sun 20 Dec 2026*
 
 ## 1. Goal
 
