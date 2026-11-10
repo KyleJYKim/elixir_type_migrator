@@ -1,7 +1,7 @@
 # elixir_type_migrator
 
 Suggests set-theoretic type signatures for Elixir functions with a fine-tuned code model,
-then verifies each suggestion with the Elixir type checker. Built on my M.Sc. thesis with [https://github.com/KyleJYKim/type_migrator](type_migrator) and [https://github.com/KyleJYKim/type_migrator_with_llm](type_migrator_with_llm) repos.
+then verifies each suggestion with the Elixir type checker. Built on my M.Sc. thesis with [type_migrator](https://github.com/KyleJYKim/type_migrator) and [type_migrator_with_llm](https://github.com/KyleJYKim/type_migrator_with_llm) repos.
 
 Status: **pre-alpha** — see [docs/SPEC.md](docs/SPEC.md) for the v1 plan.
 
