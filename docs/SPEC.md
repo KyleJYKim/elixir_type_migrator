@@ -1,6 +1,6 @@
 # elixir_type_migrator — v1 spec
 
-*Status: draft, 10-11-2026 · Target: v1.0 tagged by Sun 06 Dec 2026, deployed by Sun 20 Dec 2026*
+*Status: draft, 11-11-2026 · Target: v1.0 tagged by Sun 06 Dec 2026, deployed by Sun 20 Dec 2026*
 
 ## 1. Goal
 
@@ -37,15 +37,25 @@ editor/LSP integration, training new models, rewriting source files without revi
  v2 plugs LLM backends in behind the same service (POST /suggest).
 ```
 
-| Path | Lang | Responsibility |
-| --- | --- | --- |
-| `lib/translator/` | Elixir | TypeSpec AST → Elixir Types, ported from `type_migrator/lib/migrator/` |
-| `lib/checker/` | Elixir | Run the fork's checker with contracts in place; map warnings back to contracts |
-| `lib/service/` | Elixir, Plug + Bandit | `/migrate` and `/health`, input validation, latency logging |
-| `lib/mix/tasks/type.migrate.ex` | Elixir | The pipeline above on one project; table output, optional `--write` |
-| `lib/mix/tasks/type.eval.ex` | Elixir | Run the pipeline over the corpus, write `report.json` + `report.md` |
-| `test/fixtures/` | Elixir | ~100 TypeSpec → Elixir Types cases ported from `type_migrator/example/` |
-| `deploy/` | Docker, GH Actions | Image with the pinned fork, CI, deploy on tag |
+| Path | Layer | Responsibility | Ported from (`type_migrator`) |
+| --- | --- | --- | --- |
+| `lib/source/` | Source | Find the project's `.ex` files and read their spec/type ASTs | `SpecTranslator.process`, `Utils.safe_string_to_quoted`, `TranslationRunner.discover_files` |
+| `lib/type_table/` | TypeTable | Resolve user-defined types; anything unresolved becomes `dynamic()` | `TypeTableHandler` |
+| `lib/translator/` | Translator | TypeSpec AST → Elixir Types | `Utils.parse/translate`, `Approximator`, `TypeTranslator` |
+| `lib/emitter/` | Emitter | Render each translation as `@assert_type_form …` | `ElixirTypeConstructor` |
+| `lib/checker/` | Checker | Compile the project with the fork (`typespec-translation-fixes`), collect the warnings | new, small |
+| `lib/mix/tasks/type.migrate.ex` | Interface | The pipeline above on one project; table output, optional `--write` | `Migrator.main` |
+| `lib/service/` | Interface | Plug + Bandit: `POST /migrate`, `GET /health`, input validation, latency logging | new |
+| `test/fixtures/` | — | ~100 TypeSpec → Elixir Types cases | `type_migrator/example/` |
+| `deploy/` | — | Docker image with the pinned fork, GitHub Actions CI, deploy on tag | new |
+
+**Rules:**
+- **Source is the only layer v3 replaces.** It hands the next layer spec ASTs, not file paths,
+  so a `.beam` reader can take its place without changing anything downstream.
+- **Translator does no I/O.** It takes an AST and a type table and returns a type; no files,
+  processes or network. The mix task, the service and v2 all call it the same way.
+
+Not ported: `lib/experiments/` (dataset, Dialyzer, evaluators), `lib/ex1–4.ex`, the thesis TeX.
 
 ### `/migrate` contract (v1)
 
@@ -60,31 +70,15 @@ editor/LSP integration, training new models, rewriting source files without revi
 
 `unresolved` lists the types that became `dynamic()`.
 
-## 3. Evaluation
+## 3. Done criteria for v1.0
 
-The question v1 answers: **how many real contract violations does the new type checker find in
-existing code, and how many of its warnings can be trusted?**
+1. `mix test` passes all ported fixtures on the pinned Elixir/OTP versions.
+2. `mix type.migrate` runs on a real project (e.g. `gen_stage`) and lists each warning: function, contract, offending value.
+3. `docker compose up` runs the service from a clean clone; `curl /migrate` returns the contract above.
+4. CI runs the tests on every push; README shows the badge.
+5. *(by 20 Dec)* Public demo: paste a TypeSpec, see the translation.
 
-- **Corpus:** the open-source projects behind the thesis dataset that compile with the fork
-  (the thesis's 23,073 specs are the starting list). No training, so nothing is held out.
-- **Primary — findings:** warnings per project and per 1,000 specs. A labelled sample of
-  ~200 warnings, each sorted into *code bug* · *spec bug* (contract wrong or out of date) ·
-  *translator artefact* · *checker limitation*. Precision = (code bugs + spec bugs) / sample.
-- **Compared with Dialyzer** on the same specs: found by both, by the checker only, by Dialyzer only.
-- **Preconditions:** fixture pass rate (target 100%); share of types left as `dynamic()`
-  (the baseline v3 has to beat).
-- **Report:** `mix type.eval` writes `report.json` and `report.md`; CI publishes the summary.
-
-## 4. Done criteria for v1.0
-
-1. `mix type.migrate` in a project lists every contract violation: function, contract, offending value.
-2. `mix test` passes all ported fixtures on the pinned Elixir/OTP versions.
-3. `mix type.eval` produces the findings report on the corpus; the labelled sample and precision table are in the README.
-4. `docker compose up` runs the service from a clean clone; `curl /migrate` returns the contract above.
-5. CI runs tests and the evaluation on every push; README shows the badge.
-6. *(Goal 4, by 20 Dec)* Public demo: paste a TypeSpec, see the translation.
-
-## 5. Starting assets
+## 4. Starting assets
 
 | Asset | Status | If missing |
 | --- | --- | --- |
@@ -92,20 +86,19 @@ existing code, and how many of its warnings can be trusted?**
 | Fixtures (`type_migrator/example/`) | Exist, ~100 cases | — |
 | Dataset (`results/dataset.jsonl`, 23,073 rows) | Exists in `type_migrator` | — |
 | Corpus project list (repos + commits) | Repos recoverable from `dataset.jsonl` `file` paths (`owner/repo/…`); commits not recorded | Pin each repo to a commit when cloning; record them in a manifest |
-| `gldubc/elixir` fork, branch `typespec-translation` | **?** builds on OTP 28.1? | Pin a commit; v1 cannot report findings without it |
+| `gldubc/elixir` fork, local branch `typespec-translation-fixes` (`typespec-translation` + arity fix) | **6c6ab0e6e244d1c83bb599d6d2b6c186113be613** builds on OTP 28.1 with Elixir 1.20.5 (`.tool-versions`) | Pin a commit; v1 cannot report findings without it |
 | *v2:* CodeT5+ / Qwen checkpoints, GPU access | **?** | Not needed for v1 |
 
-## 6. Risks
+## 5. Risks
 
 - **Fork drift:** the fork moves or falls behind upstream → pin a commit SHA in CI and Docker.
 - **`Descr` internals change** between Elixir releases → depend on the printed form, not internal structs, where possible.
-- **Corpus projects fail to compile** with the fork → report the compile rate; findings only on projects that build.
+- **Projects fail to compile** with the fork → `mix type.migrate` says so and shows the compiler output; no silent failures.
 - **Too many `dynamic()` types** hide violations → report the share per project; it motivates v3.
-- **Labelling is manual** (~200 warnings) → budget about two days; write the labelling guide first.
 - **Docker size/build time** from compiling the fork → build it once into a base image and cache it.
 - **Scope creep:** new ideas go to `BACKLOG.md` until v1.0 is deployed.
 
-## 7. Later versions
+## 6. Later versions
 
 - **v2 — LLM type inference** for functions without specs (CodeT5+ 770M, Qwen2.5-Coder 7B,
   prompted API models with a generate → check → repair loop), behind `POST /suggest`.
